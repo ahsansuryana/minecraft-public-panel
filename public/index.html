@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minecraft Bedrock Server Status</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0c10;
+      --surface: #111318;
+      --surface2: #181c24;
+      --border: #1e2430;
+      --green: #22ff7a;
+      --green-dim: #0d4a28;
+      --red: #ff3b5c;
+      --red-dim: #4a0d1a;
+      --yellow: #ffc13b;
+      --yellow-dim: #4a3300;
+      --blue: #3b9eff;
+      --text: #e8eaf0;
+      --text-dim: #6b7280;
+      --pixel: 'Press Start 2P', monospace;
+      --body: 'Rajdhani', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--body);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(34,255,122,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(34,255,122,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* Glow top */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 400px;
+      background: radial-gradient(ellipse, rgba(34,255,122,0.08) 0%, transparent 70%);
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .wrapper {
+      position: relative;
+      z-index: 1;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 20px 80px;
+    }
+
+    /* HEADER */
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .server-icon {
+      display: inline-block;
+      font-size: 48px;
+      margin-bottom: 16px;
+      animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    h1 {
+      font-family: var(--pixel);
+      font-size: clamp(12px, 2.5vw, 18px);
+      color: var(--green);
+      letter-spacing: 2px;
+      text-shadow: 0 0 20px rgba(34,255,122,0.5);
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--text-dim);
+      font-weight: 500;
+      letter-spacing: 1px;
+    }
+
+    /* AUTO REFRESH BADGE */
+    .refresh-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 4px 12px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .refresh-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: blink 1.5s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
+
+    /* STATUS CARD */
+    .status-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      margin-bottom: 20px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.4s ease;
+    }
+
+    .status-card.online { border-color: var(--green-dim); }
+    .status-card.offline { border-color: var(--red-dim); }
+    .status-card.starting,
+    .status-card.stopping { border-color: var(--yellow-dim); }
+
+    .status-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--green);
+      transition: background 0.4s ease;
+      transform: scaleX(0);
+      transform-origin: left;
+      animation: scanline 0.5s ease forwards;
+    }
+
+    @keyframes scanline {
+      to { transform: scaleX(1); }
+    }
+
+    .status-card.online::before { background: var(--green); }
+    .status-card.offline::before { background: var(--red); }
+    .status-card.starting::before,
+    .status-card.stopping::before { background: var(--yellow); }
+
+    .status-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .status-label {
+      font-family: var(--pixel);
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      border-radius: 30px;
+      font-family: var(--pixel);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      transition: all 0.4s ease;
+    }
+
+    .status-badge.online {
+      background: var(--green-dim);
+      color: var(--green);
+      border: 1px solid rgba(34,255,122,0.3);
+      box-shadow: 0 0 20px rgba(34,255,122,0.1);
+    }
+
+    .status-badge.offline {
+      background: var(--red-dim);
+      color: var(--red);
+      border: 1px solid rgba(255,59,92,0.3);
+      box-shadow: 0 0 20px rgba(255,59,92,0.1);
+    }
+
+    .status-badge.starting,
+    .status-badge.stopping {
+      background: var(--yellow-dim);
+      color: var(--yellow);
+      border: 1px solid rgba(255,193,59,0.3);
+      box-shadow: 0 0 20px rgba(255,193,59,0.1);
+    }
+
+    .badge-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .online .badge-dot { animation: pulse-green 1.5s ease infinite; }
+    .starting .badge-dot, .stopping .badge-dot { animation: pulse-yellow 1s ease infinite; }
+
+    @keyframes pulse-green {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(34,255,122,0.6); }
+      50% { box-shadow: 0 0 0 6px rgba(34,255,122,0); }
+    }
+
+    @keyframes pulse-yellow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,193,59,0.6); }
+      50% { box-shadow: 0 0 0 6px rgba(255,193,59,0); }
+    }
+
+    /* RESOURCE BARS */
+    .resources {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 560px) {
+      .resources { grid-template-columns: 1fr; }
+    }
+
+    .resource-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .resource-name {
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .resource-value {
+      font-family: var(--pixel);
+      font-size: 11px;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .resource-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .resource-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: var(--green);
+      transition: width 0.6s ease;
+    }
+
+    /* UPTIME */
+    .uptime-text {
+      font-family: var(--pixel);
+      font-size: 11px;
+      color: var(--text-dim);
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    /* PLAYERS CARD */
+    .players-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px 32px;
+      margin-bottom: 20px;
+    }
+
+    .card-title {
+      font-family: var(--pixel);
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title span { color: var(--green); }
+
+    .player-count-big {
+      font-family: var(--pixel);
+      font-size: clamp(28px, 6vw, 48px);
+      color: var(--green);
+      text-shadow: 0 0 30px rgba(34,255,122,0.4);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .player-count-label {
+      font-size: 13px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+
+    .player-list {
+      margin-top: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .player-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .player-avatar {
+      width: 20px; height: 20px;
+      background: linear-gradient(135deg, var(--green-dim), var(--green));
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: var(--green);
+    }
+
+    .no-players {
+      font-size: 14px;
+      color: var(--text-dim);
+      font-style: italic;
+      margin-top: 8px;
+    }
+
+    /* POWER BUTTON */
+    .power-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px 32px;
+      text-align: center;
+    }
+
+    .power-title {
+      font-family: var(--pixel);
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+    }
+
+    .power-desc {
+      font-size: 14px;
+      color: var(--text-dim);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .btn-start {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 16px 40px;
+      background: transparent;
+      border: 2px solid var(--green);
+      border-radius: 8px;
+      color: var(--green);
+      font-family: var(--pixel);
+      font-size: 11px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      overflow: hidden;
+    }
+
+    .btn-start::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--green);
+      transform: translateY(100%);
+      transition: transform 0.2s ease;
+      z-index: 0;
+    }
+
+    .btn-start:hover::before { transform: translateY(0); }
+    .btn-start:hover { color: var(--bg); }
+    .btn-start span { position: relative; z-index: 1; }
+
+    .btn-start:disabled {
+      border-color: var(--border);
+      color: var(--text-dim);
+      cursor: not-allowed;
+    }
+
+    .btn-start:disabled::before { display: none; }
+
+    .power-message {
+      margin-top: 16px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      display: none;
+    }
+
+    .power-message.success {
+      display: block;
+      background: var(--green-dim);
+      color: var(--green);
+      border: 1px solid rgba(34,255,122,0.3);
+    }
+
+    .power-message.error {
+      display: block;
+      background: var(--red-dim);
+      color: var(--red);
+      border: 1px solid rgba(255,59,92,0.3);
+    }
+
+    /* LOADING SKELETON */
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 6px;
+      height: 16px;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* LAST UPDATED */
+    .last-updated {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    /* HIDDEN */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+
+    <header>
+      <div class="server-icon">⛏️</div>
+      <h1>MY BEDROCK SERVER</h1>
+      <p class="subtitle">Minecraft Bedrock Edition</p>
+      <div class="refresh-badge">
+        <div class="refresh-dot"></div>
+        Auto-refresh setiap 30 detik
+      </div>
+    </header>
+
+    <!-- STATUS CARD -->
+    <div class="status-card" id="statusCard">
+      <div class="status-header">
+        <div class="status-label">SERVER STATUS</div>
+        <div class="status-badge" id="statusBadge">
+          <div class="badge-dot"></div>
+          <span id="statusText">Memuat...</span>
+        </div>
+      </div>
+
+      <div class="resources" id="resources">
+        <div class="resource-item">
+          <div class="resource-name">CPU</div>
+          <div class="resource-value" id="cpuVal">—</div>
+          <div class="resource-bar"><div class="resource-fill" id="cpuBar" style="width:0%"></div></div>
+        </div>
+        <div class="resource-item">
+          <div class="resource-name">RAM</div>
+          <div class="resource-value" id="ramVal">—</div>
+          <div class="resource-bar"><div class="resource-fill" id="ramBar" style="width:0%; background: var(--blue)"></div></div>
+        </div>
+        <div class="resource-item">
+          <div class="resource-name">DISK</div>
+          <div class="resource-value" id="diskVal">—</div>
+          <div class="resource-bar"><div class="resource-fill" id="diskBar" style="width:0%; background: var(--yellow)"></div></div>
+        </div>
+      </div>
+
+      <div class="uptime-text" id="uptimeText"></div>
+    </div>
+
+    <!-- PLAYERS CARD -->
+    <div class="players-card">
+      <div class="card-title">PLAYERS ONLINE <span id="playerCountSmall">0</span></div>
+      <div class="player-count-big" id="playerCountBig">0</div>
+      <div class="player-count-label">player sedang online</div>
+      <div class="player-list" id="playerList">
+        <div class="no-players" id="noPlayersMsg">Tidak ada player online saat ini.</div>
+      </div>
+    </div>
+
+    <!-- POWER CARD -->
+    <div class="power-card" id="powerCard">
+      <div class="power-title">⚡ SERVER CONTROL</div>
+      <p class="power-desc" id="powerDesc">
+        Server sedang offline. Kamu bisa menghidupkannya!
+      </p>
+      <button class="btn-start" id="btnStart" onclick="startServer()">
+        <span>▶ HIDUPKAN SERVER</span>
+      </button>
+      <div class="power-message" id="powerMessage"></div>
+    </div>
+
+    <div class="last-updated" id="lastUpdated"></div>
+  </div>
+
+  <script>
+    let currentStatus = null;
+
+    function formatUptime(seconds) {
+      if (!seconds || seconds <= 0) return '';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      if (h > 0) return `Uptime: ${h}j ${m}m`;
+      if (m > 0) return `Uptime: ${m}m ${s}s`;
+      return `Uptime: ${s}s`;
+    }
+
+    function updateStatus(data) {
+      currentStatus = data.status;
+      const card = document.getElementById('statusCard');
+      const badge = document.getElementById('statusBadge');
+      const statusText = document.getElementById('statusText');
+      const powerCard = document.getElementById('powerCard');
+      const powerDesc = document.getElementById('powerDesc');
+      const btnStart = document.getElementById('btnStart');
+
+      // Reset classes
+      card.className = 'status-card ' + data.status;
+      badge.className = 'status-badge ' + data.status;
+
+      const statusLabels = {
+        online: 'ONLINE',
+        offline: 'OFFLINE',
+        starting: 'STARTING...',
+        stopping: 'STOPPING...',
+      };
+      statusText.textContent = statusLabels[data.status] || data.status.toUpperCase();
+
+      // Resources
+      if (data.resources) {
+        document.getElementById('cpuVal').textContent = data.resources.cpu_percent + '%';
+        document.getElementById('cpuBar').style.width = Math.min(data.resources.cpu_percent, 100) + '%';
+
+        document.getElementById('ramVal').textContent = data.resources.memory_mb + ' MB';
+        document.getElementById('ramBar').style.width = Math.min((data.resources.memory_mb / 1024) * 100, 100) + '%';
+
+        document.getElementById('diskVal').textContent = data.resources.disk_mb + ' MB';
+        document.getElementById('diskBar').style.width = Math.min((data.resources.disk_mb / 10240) * 100, 100) + '%';
+      }
+
+      // Uptime
+      document.getElementById('uptimeText').textContent = formatUptime(data.uptime_seconds);
+
+      // Power card
+      if (data.status === 'offline') {
+        powerCard.classList.remove('hidden');
+        powerDesc.textContent = 'Server sedang offline. Kamu bisa menghidupkannya!';
+        btnStart.disabled = false;
+      } else if (data.status === 'starting') {
+        powerCard.classList.remove('hidden');
+        powerDesc.textContent = 'Server sedang dalam proses start, harap tunggu...';
+        btnStart.disabled = true;
+      } else {
+        powerCard.classList.add('hidden');
+        document.getElementById('powerMessage').className = 'power-message';
+      }
+    }
+
+    function updatePlayers(playerData) {
+      const countBig = document.getElementById('playerCountBig');
+      const countSmall = document.getElementById('playerCountSmall');
+      const list = document.getElementById('playerList');
+      const noMsg = document.getElementById('noPlayersMsg');
+
+      countBig.textContent = playerData.online || 0;
+      countSmall.textContent = playerData.online || 0;
+
+      // Clear old players
+      list.innerHTML = '';
+
+      if (playerData.players && playerData.players.length > 0) {
+        playerData.players.forEach(name => {
+          const chip = document.createElement('div');
+          chip.className = 'player-chip';
+          chip.innerHTML = `<div class="player-avatar">👤</div>${name}`;
+          list.appendChild(chip);
+        });
+      } else {
+        const msg = document.createElement('div');
+        msg.className = 'no-players';
+        msg.textContent = currentStatus === 'offline'
+          ? 'Server sedang offline.'
+          : 'Tidak ada player online saat ini.';
+        list.appendChild(msg);
+      }
+    }
+
+    async function fetchInfo() {
+      try {
+        const res = await fetch('/api/info');
+        const json = await res.json();
+
+        if (json.success) {
+          updateStatus(json.data);
+          updatePlayers(json.data.players);
+          document.getElementById('lastUpdated').textContent =
+            'Terakhir diperbarui: ' + new Date(json.timestamp).toLocaleTimeString('id-ID');
+        }
+      } catch (err) {
+        console.error('Gagal fetch:', err);
+        document.getElementById('lastUpdated').textContent = 'Gagal memuat data. Mencoba ulang...';
+      }
+    }
+
+    async function startServer() {
+      const btn = document.getElementById('btnStart');
+      const msg = document.getElementById('powerMessage');
+
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ MENGHIDUPKAN...</span>';
+      msg.className = 'power-message';
+
+      try {
+        const res = await fetch('/api/power', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'start' }),
+        });
+        const json = await res.json();
+
+        if (json.success) {
+          msg.className = 'power-message success';
+          msg.textContent = '✅ ' + json.message;
+          setTimeout(fetchInfo, 3000);
+        } else {
+          msg.className = 'power-message error';
+          msg.textContent = '❌ ' + json.error;
+          btn.disabled = false;
+          btn.innerHTML = '<span>▶ HIDUPKAN SERVER</span>';
+        }
+      } catch (err) {
+        msg.className = 'power-message error';
+        msg.textContent = '❌ Gagal menghubungi server.';
+        btn.disabled = false;
+        btn.innerHTML = '<span>▶ HIDUPKAN SERVER</span>';
+      }
+    }
+
+    // Init
+    fetchInfo();
+    setInterval(fetchInfo, 30000);
+  </script>
+</body>
+</html>
