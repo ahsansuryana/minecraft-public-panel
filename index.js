@@ -1,8 +1,9 @@
 require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
-const WebSocket = require("ws");
 const path = require("path");
+const wsManager = require("./wsManager");
+const discord = require("./discordBot");
 
 const app = express();
 app.use(express.json());
@@ -44,85 +45,6 @@ async function getServerStatus() {
   };
 }
 
-function getOnlinePlayers() {
-  return new Promise(async (resolve, reject) => {
-    let ws = null;
-    let timer = null;
-    let expectingPlayerList = false;
-    let onlineCount = 0;
-
-    const cleanup = () => {
-      if (timer) clearTimeout(timer);
-      if (ws && ws.readyState === WebSocket.OPEN) ws.close();
-    };
-
-    try {
-      const res = await axiosClient.get(
-        `/api/client/servers/${CONFIG.SERVER_ID}/websocket`,
-      );
-      const { token, socket: wsUrl } = res.data.data;
-
-      ws = new WebSocket(wsUrl, { headers: { Origin: CONFIG.PANEL_URL } });
-
-      timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timeout: Server tidak merespons"));
-      }, CONFIG.TIMEOUT);
-
-      ws.on("open", () => {
-        ws.send(JSON.stringify({ event: "auth", args: [token] }));
-      });
-
-      ws.on("message", (data) => {
-        try {
-          const msg = JSON.parse(data);
-          if (msg.event === "auth success") {
-            ws.send(JSON.stringify({ event: "send command", args: ["list"] }));
-          }
-          if (msg.event === "console output") {
-            const line = msg.args[0];
-            if (line.includes("players online")) {
-              const match = line.match(
-                /There are (\d+)\/(\d+) players online/i,
-              );
-              if (match) {
-                onlineCount = parseInt(match[1]);
-                const maxPlayers = parseInt(match[2]);
-                if (onlineCount === 0) {
-                  cleanup();
-                  resolve({ online: 0, max: maxPlayers, players: [] });
-                  return;
-                }
-                expectingPlayerList = true;
-              }
-            } else if (expectingPlayerList && onlineCount > 0) {
-              const players = line
-                .trim()
-                .split(",")
-                .map((p) => p.trim())
-                .filter((p) => p.length > 0);
-              cleanup();
-              resolve({ online: onlineCount, players });
-            }
-          }
-          if (msg.event === "daemon error") {
-            cleanup();
-            reject(new Error(`Daemon error: ${msg.args[0]}`));
-          }
-        } catch (e) {}
-      });
-
-      ws.on("error", (err) => {
-        cleanup();
-        reject(new Error(`WebSocket error: ${err.message}`));
-      });
-    } catch (err) {
-      cleanup();
-      reject(new Error(`Gagal koneksi: ${err.message}`));
-    }
-  });
-}
-
 async function sendPowerAction(action) {
   await axiosClient.post(`/api/client/servers/${CONFIG.SERVER_ID}/power`, {
     signal: action,
@@ -161,7 +83,7 @@ app.get("/api/status", async (req, res) => {
   }
 });
 
-// GET /api/players
+// GET /api/players — pakai WS persistent, kirim command "list"
 app.get("/api/players", async (req, res) => {
   try {
     const status = await getServerStatus();
@@ -172,7 +94,9 @@ app.get("/api/players", async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     }
-    const players = await getOnlinePlayers();
+
+    // Minta data terbaru via WS command "list"
+    const players = await wsManager.getOnlinePlayersWS();
     res.json({
       success: true,
       data: { ...players, server_status: "running" },
@@ -197,7 +121,7 @@ app.get("/api/info", async (req, res) => {
     let playerData = { online: 0, max: 0, players: [] };
     if (status.status === "running") {
       try {
-        playerData = await getOnlinePlayers();
+        playerData = await wsManager.getOnlinePlayersWS();
       } catch (e) {}
     }
 
@@ -220,7 +144,7 @@ app.get("/api/info", async (req, res) => {
   }
 });
 
-// POST /api/power — publik hanya bisa start
+// POST /api/power
 app.post("/api/power", async (req, res) => {
   const { action } = req.body;
 
@@ -253,16 +177,27 @@ app.post("/api/power", async (req, res) => {
 
 // GET /health
 app.get("/health", (req, res) => {
+  const wsState = wsManager.getState();
   res.json({
     status: "ok",
     panel: CONFIG.PANEL_URL,
     server_id: CONFIG.SERVER_ID,
+    websocket: {
+      connected: wsState.connected,
+      authenticated: wsState.authenticated,
+      online_players: wsState.onlinePlayers,
+    },
   });
 });
 
 // Serve frontend
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.get("/test-discord", async (req, res) => {
+  await discord.onPlayerJoin("TestPlayer", ["TestPlayer", "Steve"]);
+  res.json({ success: true });
 });
 
 // =====================
@@ -278,5 +213,17 @@ app.listen(PORT, () => {
   console.log(`  GET  /api/status   → status + resource usage`);
   console.log(`  GET  /api/players  → player online`);
   console.log(`  POST /api/power    → start server (publik)`);
+  console.log(`  GET  /health       → health check + WS state`);
   console.log(`  GET  /             → Web UI publik`);
+
+  // Init Discord Bot
+  discord.init();
+
+  // Init persistent WebSocket ke Pterodactyl
+  wsManager.init(CONFIG, axiosClient, {
+    onPlayerJoin: discord.onPlayerJoin,
+    onPlayerLeave: discord.onPlayerLeave,
+    onServerOnline: discord.onServerOnline,
+    onServerOffline: discord.onServerOffline,
+  });
 });
